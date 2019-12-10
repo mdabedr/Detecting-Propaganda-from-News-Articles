@@ -22,17 +22,15 @@ class LSTMTagger(nn.Module):
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.bidirectional = True
-        self.num_layers = 3
+        self.num_layers = 2
         self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=self.num_layers, batch_first=True,
                             bidirectional=self.bidirectional, dropout=0.25)
         # self.hidden = self.init_hidden()
         self.dropout = nn.Dropout(0.2)
         if self.bidirectional:
-            self.attention_layer = self.att(hidden_dim*2)
             self.hidden2label = nn.Linear(hidden_dim*2, label_size)
         else:
-            self.attention_layer = self.att(hidden_dim)
             self.hidden2label = nn.Linear(hidden_dim, label_size)
 
         # self.last_layer = nn.Linear(hidden_dim, label_size * 100)
@@ -77,20 +75,18 @@ class LSTMTagger(nn.Module):
         # global attention
             # output = lstm_out
             # seq_len = tor
-        output = lstm_out
-        seq_len = torch.LongTensor(unpacked_len).view(-1, 1, 1).expand(output.size(0), 1, output.size(2))
-        seq_len = Variable(seq_len - 1).cuda()
-        out = torch.gather(output, 1, seq_len).squeeze(1)
 
-        # loss = self.loss_criterion(nn.Sigmoid()(y_pred), y)
-        y_pred = self.hidden2label(out)
-        # y_pred = self.dropout(y_pred)
-        y_pred = F.sigmoid(y_pred)
+        bs, pad_len, lstm_dim = lstm_out.size()
+        lstm_out = lstm_out.reshape(-1, lstm_dim)
+        y_pred = self.hidden2label(lstm_out)
+        y_pred = y_pred.reshape(bs, pad_len, -1)
+
         y_pred = y_pred[reverse_idx]
-        if self.soft_last:
-            return F.softmax(y_pred)
-        else:
-            return y_pred
+        unpacked_len = unpacked_len[reverse_idx]
+
+        y_pred = [y[:l] for y, l in zip(y_pred, unpacked_len)]
+
+        return torch.cat(y_pred, dim=0)
 
     def load_embedding(self, emb):
         self.embeddings.weight = nn.Parameter(torch.FloatTensor(emb))

@@ -133,8 +133,8 @@ class GloveTokenizer(Tokenizer):
     def get_embeddings(self):
         return self.embeddings
 
-    def encode_ids(self, text):
-        return [self.word2id[x] for x in self.tokenize(text)]
+    def encode_ids(self, text, split_tokens=True):
+        return [self.word2id[x] for x in self.tokenize(text, split_tokens=split_tokens)]
 
     def encode_ids_pad(self, text):
         text = self.encode_ids(text)
@@ -149,8 +149,12 @@ class GloveTokenizer(Tokenizer):
     def decode_ids(self, ids):
         return [self.id2word[int(x)] for x in ids if x != 0]
 
-    def tokenize(self, text):
-        tokens = [x for x in text.split() if x in self.word2id]
+    def tokenize(self, text, split_tokens=True):
+        if split_tokens:
+            tokens = [x for x in text.split() if x in self.word2id]
+        else:
+            tokens = [x for x in text if x in self.word2id]
+
         if len(tokens) == 0:
             tokens = ['<empty>']
         return tokens
