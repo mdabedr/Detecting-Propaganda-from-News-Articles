@@ -368,12 +368,18 @@ def unique(list1):
 
 # Make sure prepare_sequence from earlier in the LSTM section is loaded
 from sklearn.metrics import classification_report
+import random
+random.seed(0)
+BATCH_SIZE = 16
+num_steps = 0
+model.zero_grad()
 
 for epoch in range(50):  # again, normally you would NOT do 300 epochs, it is toy data
+    random.shuffle(training_data)
+    train_loss = 0
+    model.train()
     for sentence, tags in tqdm(training_data):
-        # Step 1. Remember that Pytorch accumulates gradients.
-        # We need to clear them out before each instance
-        model.zero_grad()
+        num_steps += 1
 
         # Step 2. Get our inputs ready for the network, that is,
         # turn them into Tensors of word indices.
@@ -384,19 +390,23 @@ for epoch in range(50):  # again, normally you would NOT do 300 epochs, it is to
         loss = model.neg_log_likelihood(sentence_in, targets)
         # model.
         # nn.modules
-
-
+        train_loss += loss.data.cpu().numpy()[0]
         # Step 4. Compute the loss, gradients, and update the parameters by
         # calling optimizer.step()
         loss.backward()
-        optimizer.step()
+        if num_steps % BATCH_SIZE == 0:
+            optimizer.step()
+            model.zero_grad()
+
     print("For run:", epoch)
-    print(loss)
+    print(f"Training loss is: {train_loss/len(training_data):.4f}")
 
     predictions, true_labels = [], []
+    model.eval()
     with torch.no_grad():
         for i in range(0, len(Xtest)):
             precheck_sent = prepare_sequence(Xtest[i], word_to_ix)
+
             tags_predicted = model(precheck_sent)
             # print(tags_predicted[1])
             # print(type(tags_predicted[1]))
