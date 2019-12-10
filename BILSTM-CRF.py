@@ -390,7 +390,7 @@ for epoch in range(50):  # again, normally you would NOT do 300 epochs, it is to
         loss = model.neg_log_likelihood(sentence_in, targets)
         # model.
         # nn.modules
-        train_loss += loss.data.cpu().numpy()
+        train_loss += loss.data.cpu().numpy()[0]
         # Step 4. Compute the loss, gradients, and update the parameters by
         # calling optimizer.step()
         loss.backward()
