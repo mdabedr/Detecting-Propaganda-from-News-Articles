@@ -13,17 +13,21 @@ from model.lstm_tagger import LSTMTagger
 from tqdm import tqdm
 from sklearn.metrics import classification_report
 from utils.focalloss import FocalLoss
+import nltk
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import wordnet as wn
+import re
 
 # hyper-parameters
 MAX_EPOCH = 300
 EMBEDDING_DIM = 300
-PAD_LEN = 60
+PAD_LEN = 200
 MIN_LEN_DATA = 3
 BATCH_SIZE = 8
 CLIPS = 0.888  # ref. I Ching, 750 BC
-HIDDEN_DIM = 200
+HIDDEN_DIM = 100
 VOCAB_SIZE = 60000
-LEARNING_RATE = 5e-4
+LEARNING_RATE = 1e-4
 PATIENCE = 3
 USE_ATT = False
 GLOVE_PATH = '/remote/eureka1/chuang8/glove.840B.300d.txt'
@@ -112,8 +116,8 @@ def train(X_train, y_train, X_dev, y_dev):
     # model = nn.DataParallel(model)
     model.cuda()
 
-    # loss_criterion = nn.CrossEntropyLoss()  #
-    loss_criterion = FocalLoss(2)
+    loss_criterion = nn.CrossEntropyLoss()  #
+    # loss_criterion = FocalLoss(2)
 
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -155,15 +159,40 @@ def train(X_train, y_train, X_dev, y_dev):
         print("Train Loss: ", str(train_loss / len(train_data)), " Evaluation: ", str(test_loss / len(dev_data)))
 
 
+def remove_symbol(s):
+    s_prime = re.sub(r'[^\w]', '', s)
+    if len(s_prime) > 0:
+        return s_prime
+    else:
+        return s
+
+
+def preprocess_tokens(tokens):
+    tokens = [remove_symbol(x) for x in tokens]
+    def get_wornet_pos(pos_tag):
+        if pos_tag.startswith('J'):
+            return wn.ADJ
+        elif pos_tag.startswith('V'):
+            return wn.VERB
+        elif pos_tag.startswith('N'):
+            return wn.NOUN
+        elif pos_tag.startswith('R'):
+            return wn.ADV
+        else:
+            return wn.NOUN
+    wordnet_lemmatizer = WordNetLemmatizer()
+    pos_tags = nltk.pos_tag(tokens)
+    _tokens = [wordnet_lemmatizer.lemmatize(x, get_wornet_pos(e[1])) for x, e in zip(tokens, pos_tags)]
+    return _tokens
+
 def main():
     training_data, A, X_dev, y_dev, Atest = pickle.load(open("FromSahir'sCode.pk", "rb"))
-    X_train = [x[0] for x in training_data]
+    X_train = [preprocess_tokens(x[0]) for x in training_data]
     y_train = [x[1] for x in training_data]
+    X_dev = [preprocess_tokens(x) for x in X_dev]
     tokenizer.build_tokenizer(X_train + X_dev, need_split=False)
     tokenizer.build_embedding(GLOVE_PATH, save_pkl=True, dataset_name='tmpmt')
     train(X_train, y_train, X_dev, y_dev)
-
-    tmp = 0
 
 
 if __name__ == '__main__':
