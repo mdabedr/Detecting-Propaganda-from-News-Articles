@@ -129,30 +129,34 @@ def train(X_train, y_train, X_dev, y_dev):
         for i, (data, seq_len, label) in tqdm(enumerate(train_loader),
                                               total=len(train_data)/BATCH_SIZE):
             optimizer.zero_grad()
-            y_pred = model(data.cuda(), seq_len)
-            label = torch.cat([x[x!=tag_to_ix['PAD']] for x in label])
-            loss = loss_criterion(y_pred, label.cuda())
+            loss = model(data.cuda(), seq_len, label.cuda())
+            # label = torch.cat([x[x!=tag_to_ix['PAD']] for x in label])
+            loss /= data.size()[0]
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), CLIPS)
             optimizer.step()
             train_loss += loss.data.cpu().numpy() * data.shape[0]
-            del y_pred, loss
+            break
+            del loss
 
         test_loss = 0
         model.eval()
         y_eval_list = []
         label_eval_list = []
-        for _, (_data, _seq_len, _label) in enumerate(dev_loader):
+        for idx, (_data, _seq_len, _label) in enumerate(dev_loader):
             with torch.no_grad():
-                _y_pred = model(_data.cuda(), _seq_len)
+                loss = model(_data.cuda(), _seq_len, _label.cuda())
+                _y_pred = model(_data.cuda(), _seq_len, is_decode=True)
                 _label = torch.cat([x[x != tag_to_ix['PAD']] for x in _label])
-                loss = loss_criterion(_y_pred, _label.cuda())
+                loss /= _data.size()[0]
                 test_loss += loss.data.cpu().numpy() * _data.shape[0]
                 y_eval_list.append(_y_pred.data.cpu().numpy())
                 label_eval_list.append(_label)
+                if idx > 1:
+                    break
                 del _y_pred, loss
 
-        y_eval_list = np.argmax(np.concatenate(y_eval_list, axis=0), axis=1)
+        y_eval_list = np.concatenate(y_eval_list, axis=0)
         label_eval_list = np.concatenate(label_eval_list, axis=0)
         print(classification_report(label_eval_list, y_eval_list))
         print("Train Loss: ", str(train_loss / len(train_data)), " Evaluation: ", str(test_loss / len(dev_data)))

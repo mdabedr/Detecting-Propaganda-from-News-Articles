@@ -34,7 +34,7 @@ class LSTMTagger(nn.Module):
         else:
             self.hidden2label = nn.Linear(hidden_dim, label_size)
 
-        self.crf = CRF(2)
+        self.crf = CRF(2, batch_first=True)
 
         # self.last_layer = nn.Linear(hidden_dim, label_size * 100)
         # loss
@@ -62,7 +62,7 @@ class LSTMTagger(nn.Module):
             c0 = Variable(torch.zeros(1*self.num_layers, batch_size, self.hidden_dim), requires_grad=False).cuda()
         return (h0, c0)
 
-    def forward(self, x, seq_len, y=None, is_decode=True):
+    def forward(self, x, seq_len, y=None, is_decode=False):
 
         x, seq_len, reverse_idx = self.sort_batch(x, seq_len.view(-1))
 
@@ -87,17 +87,24 @@ class LSTMTagger(nn.Module):
         y_pred = y_pred[reverse_idx]
         unpacked_len = unpacked_len[reverse_idx]
 
-        y_pred = [y[:l] for y, l in zip(y_pred, unpacked_len)]
 
-        # return torch.cat(y_pred, dim=0)
+
+        # make the mask
+        max_len = max(unpacked_len)
+        mask = [[1]*int(x) + [0]*int(max_len-x) for x in unpacked_len]
+        mask = torch.tensor(mask, dtype=torch.uint8).cuda()
 
         if not is_decode:
-            return -self.crf(decoder_logit.transpose(1, 0), trg.transpose(1, 0)) \
-                   / decoder_logit.size(0) / decoder_logit.size(1), \
-                   torch.FloatTensor(self.crf.decode(decoder_logit.transpose(1, 0))).cuda()
+            y[y == 999] = 0  # FIXME hardcoded '999' is the pad for tag
+            y = torch.tensor(y[:, :max_len], dtype=torch.long)
+            return -self.crf(y_pred, y, mask=mask).cuda()
             # crf loss and decode logits
         else:
-            return torch.FloatTensor(self.crf.decode(decoder_logit.transpose(1, 0))).cuda()
+            y_pred = torch.FloatTensor(self.crf.decode(y_pred)).cuda()
+            y_pred = [y[:l] for y, l in zip(y_pred, unpacked_len)]
+            return torch.cat(y_pred, dim=0)
+
+            return
             # crf logits
 
     def load_embedding(self, emb):

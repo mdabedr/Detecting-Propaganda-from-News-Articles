@@ -24,7 +24,7 @@ PAD_LEN = 200
 MIN_LEN_DATA = 3
 BATCH_SIZE = 4
 CLIPS = 0.888  # ref. I Ching, 750 BC
-HIDDEN_DIM = 128
+HIDDEN_DIM = 256
 VOCAB_SIZE = 60000
 LEARNING_RATE = 1e-4
 PATIENCE = 3
@@ -166,23 +166,26 @@ def remove_symbol(s):
         return s
 
 
-def preprocess_tokens(tokens):
+def preprocess_tokens(tokens, lem=False):
     tokens = [remove_symbol(x) for x in tokens]
-    def get_wornet_pos(pos_tag):
-        if pos_tag.startswith('J'):
-            return wn.ADJ
-        elif pos_tag.startswith('V'):
-            return wn.VERB
-        elif pos_tag.startswith('N'):
-            return wn.NOUN
-        elif pos_tag.startswith('R'):
-            return wn.ADV
-        else:
-            return wn.NOUN
-    wordnet_lemmatizer = WordNetLemmatizer()
-    pos_tags = nltk.pos_tag(tokens)
-    _tokens = [wordnet_lemmatizer.lemmatize(x, get_wornet_pos(e[1])) for x, e in zip(tokens, pos_tags)]
-    return _tokens
+    if not lem:
+        return tokens
+    else:
+        def get_wornet_pos(pos_tag):
+            if pos_tag.startswith('J'):
+                return wn.ADJ
+            elif pos_tag.startswith('V'):
+                return wn.VERB
+            elif pos_tag.startswith('N'):
+                return wn.NOUN
+            elif pos_tag.startswith('R'):
+                return wn.ADV
+            else:
+                return wn.NOUN
+        wordnet_lemmatizer = WordNetLemmatizer()
+        pos_tags = nltk.pos_tag(tokens)
+        _tokens = [wordnet_lemmatizer.lemmatize(x, get_wornet_pos(e[1])) for x, e in zip(tokens, pos_tags)]
+        return _tokens
 
 def main():
     training_data, A, X_dev, y_dev, Atest = pickle.load(open("FromSahir'sCode.pk", "rb"))
