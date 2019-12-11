@@ -32,7 +32,7 @@ USE_ATT = False
 GLOVE_PATH = '/remote/eureka1/chuang8/glove.840B.300d.txt'
 tokenizer = GloveTokenizer()
 tag_to_ix = {"O": 0, "I": 1, "PAD": 999}
-
+LEM = True
 
 class TrainDataLoader(Dataset):
     def __init__(self, X, y, pad_len, max_size=None):
@@ -131,12 +131,12 @@ def train(X_train, y_train, X_dev, y_dev):
             optimizer.zero_grad()
             loss = model(data.cuda(), seq_len, label.cuda())
             # label = torch.cat([x[x!=tag_to_ix['PAD']] for x in label])
+            # loss = torch.matmul(torch.gather(class_weights, 0, label.cuda()), loss)
             loss /= data.size()[0]
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), CLIPS)
             optimizer.step()
             train_loss += loss.data.cpu().numpy() * data.shape[0]
-            break
             del loss
 
         test_loss = 0
@@ -146,14 +146,13 @@ def train(X_train, y_train, X_dev, y_dev):
         for idx, (_data, _seq_len, _label) in enumerate(dev_loader):
             with torch.no_grad():
                 loss = model(_data.cuda(), _seq_len, _label.cuda())
+                # loss = torch.matmul(torch.gather(class_weights, 0, _label.cuda()), loss)
                 _y_pred = model(_data.cuda(), _seq_len, is_decode=True)
                 _label = torch.cat([x[x != tag_to_ix['PAD']] for x in _label])
                 loss /= _data.size()[0]
                 test_loss += loss.data.cpu().numpy() * _data.shape[0]
                 y_eval_list.append(_y_pred.data.cpu().numpy())
                 label_eval_list.append(_label)
-                if idx > 1:
-                    break
                 del _y_pred, loss
 
         y_eval_list = np.concatenate(y_eval_list, axis=0)
@@ -170,23 +169,26 @@ def remove_symbol(s):
         return s
 
 
-def preprocess_tokens(tokens):
+def preprocess_tokens(tokens, lem=LEM):
     tokens = [remove_symbol(x) for x in tokens]
-    def get_wornet_pos(pos_tag):
-        if pos_tag.startswith('J'):
-            return wn.ADJ
-        elif pos_tag.startswith('V'):
-            return wn.VERB
-        elif pos_tag.startswith('N'):
-            return wn.NOUN
-        elif pos_tag.startswith('R'):
-            return wn.ADV
-        else:
-            return wn.NOUN
-    wordnet_lemmatizer = WordNetLemmatizer()
-    pos_tags = nltk.pos_tag(tokens)
-    _tokens = [wordnet_lemmatizer.lemmatize(x, get_wornet_pos(e[1])) for x, e in zip(tokens, pos_tags)]
-    return _tokens
+    if not lem:
+        return tokens
+    else:
+        def get_wornet_pos(pos_tag):
+            if pos_tag.startswith('J'):
+                return wn.ADJ
+            elif pos_tag.startswith('V'):
+                return wn.VERB
+            elif pos_tag.startswith('N'):
+                return wn.NOUN
+            elif pos_tag.startswith('R'):
+                return wn.ADV
+            else:
+                return wn.NOUN
+        wordnet_lemmatizer = WordNetLemmatizer()
+        pos_tags = nltk.pos_tag(tokens)
+        _tokens = [wordnet_lemmatizer.lemmatize(x, get_wornet_pos(e[1])) for x, e in zip(tokens, pos_tags)]
+        return _tokens
 
 def main():
     training_data, A, X_dev, y_dev, Atest = pickle.load(open("FromSahir'sCode.pk", "rb"))
@@ -194,7 +196,7 @@ def main():
     y_train = [x[1] for x in training_data]
     X_dev = [preprocess_tokens(x) for x in X_dev]
     tokenizer.build_tokenizer(X_train + X_dev, need_split=False)
-    tokenizer.build_embedding(GLOVE_PATH, save_pkl=True, dataset_name='tmpmt')
+    tokenizer.build_embedding(GLOVE_PATH, save_pkl=True, dataset_name=f'lem={str(LEM)}')
     train(X_train, y_train, X_dev, y_dev)
 
 

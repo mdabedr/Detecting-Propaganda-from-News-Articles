@@ -28,7 +28,7 @@ HIDDEN_DIM = 256
 VOCAB_SIZE = 60000
 LEARNING_RATE = 1e-4
 PATIENCE = 3
-USE_ATT = False
+LEM = False
 GLOVE_PATH = '/remote/eureka1/chuang8/glove.840B.300d.txt'
 tokenizer = GloveTokenizer()
 tag_to_ix = {"O": 0, "I": 1, "PAD": 999}
@@ -166,7 +166,7 @@ def remove_symbol(s):
         return s
 
 
-def preprocess_tokens(tokens, lem=False):
+def preprocess_tokens(tokens, lem=LEM):
     tokens = [remove_symbol(x) for x in tokens]
     if not lem:
         return tokens
@@ -193,7 +193,7 @@ def main():
     y_train = [x[1] for x in training_data]
     X_dev = [preprocess_tokens(x) for x in X_dev]
     tokenizer.build_tokenizer(X_train + X_dev, need_split=False)
-    tokenizer.build_embedding(GLOVE_PATH, save_pkl=True, dataset_name='tmpmt')
+    tokenizer.build_embedding(GLOVE_PATH, save_pkl=True, dataset_name=f'lem={str(LEM)}')
     train(X_train, y_train, X_dev, y_dev)
 
 

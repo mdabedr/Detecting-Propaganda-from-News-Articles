@@ -62,7 +62,7 @@ class LSTMTagger(nn.Module):
             c0 = Variable(torch.zeros(1*self.num_layers, batch_size, self.hidden_dim), requires_grad=False).cuda()
         return (h0, c0)
 
-    def forward(self, x, seq_len, y=None, is_decode=False):
+    def forward(self, x, seq_len, y=None, is_decode=False, reduction='sum'):
 
         x, seq_len, reverse_idx = self.sort_batch(x, seq_len.view(-1))
 
@@ -87,8 +87,6 @@ class LSTMTagger(nn.Module):
         y_pred = y_pred[reverse_idx]
         unpacked_len = unpacked_len[reverse_idx]
 
-
-
         # make the mask
         max_len = max(unpacked_len)
         mask = [[1]*int(x) + [0]*int(max_len-x) for x in unpacked_len]
@@ -97,7 +95,7 @@ class LSTMTagger(nn.Module):
         if not is_decode:
             y[y == 999] = 0  # FIXME hardcoded '999' is the pad for tag
             y = torch.tensor(y[:, :max_len], dtype=torch.long)
-            return -self.crf(y_pred, y, mask=mask).cuda()
+            return -self.crf(y_pred, y, mask=mask, reduction=reduction).cuda()
             # crf loss and decode logits
         else:
             y_pred = torch.FloatTensor(self.crf.decode(y_pred)).cuda()
