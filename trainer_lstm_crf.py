@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from model.lstm_tagger import LSTMTagger
+from model.lstm_crf_tagger import LSTMTagger
 from tqdm import tqdm
 from sklearn.metrics import classification_report
 from utils.focalloss import FocalLoss
@@ -24,7 +24,7 @@ PAD_LEN = 200
 MIN_LEN_DATA = 3
 BATCH_SIZE = 4
 CLIPS = 0.888  # ref. I Ching, 750 BC
-HIDDEN_DIM = 128
+HIDDEN_DIM = 200
 VOCAB_SIZE = 60000
 LEARNING_RATE = 1e-4
 PATIENCE = 3
