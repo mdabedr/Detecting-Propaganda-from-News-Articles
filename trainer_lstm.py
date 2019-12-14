@@ -15,21 +15,24 @@ from utils.focalloss import FocalLoss
 import nltk
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet as wn
+import sklearn
 import re
 
 # hyper-parameters
 MAX_EPOCH = 300
 EMBEDDING_DIM = 300
-PAD_LEN = 200
+PAD_LEN = 7600
 MIN_LEN_DATA = 3
-BATCH_SIZE = 4
+# Changing these settings
+# BATCH_SIZE = 4
+BATCH_SIZE = 1
 CLIPS = 0.888  # ref. I Ching, 750 BC
 HIDDEN_DIM = 256
 VOCAB_SIZE = 60000
 LEARNING_RATE = 1e-4
 PATIENCE = 3
 LEM = False
-GLOVE_PATH = '/remote/eureka1/chuang8/glove.840B.300d.txt'
+GLOVE_PATH = './glove.840B.300d.txt'
 tokenizer = GloveTokenizer()
 tag_to_ix = {"O": 0, "I": 1, "PAD": 999}
 
@@ -98,7 +101,6 @@ class TestDataLoader(Dataset):
 
 
 def train(X_train, y_train, X_dev, y_dev):
-
     vocab_size = VOCAB_SIZE
 
     print('NUM of VOCAB' + str(vocab_size))
@@ -118,19 +120,38 @@ def train(X_train, y_train, X_dev, y_dev):
     loss_criterion = nn.CrossEntropyLoss(weight=class_weights)  #
     # loss_criterion = FocalLoss(2)
 
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    # optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE,weight_decay=1e-4) #This works!!!!!
+
+    new_patience = PATIENCE
+
+    # if new_patience<=1:
+    #     optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.5, weight_decay=1e-4)
+    # else:
+    #     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
 
     es = EarlyStopping(patience=PATIENCE)
+
     old_model = None
+    best_loss = 100000
+    best_report = None
+    best_f1=0.00
+
     for epoch in range(1, MAX_EPOCH):
         print('Epoch: ' + str(epoch) + '===================================')
+
+        if new_patience<=1:
+            print("Using SGD")
+            optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE/10, momentum=0.5, weight_decay=1e-4)
+        else:
+            print("Using Adam")
+            optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
         train_loss = 0
         model.train()
         for i, (data, seq_len, label) in tqdm(enumerate(train_loader),
-                                              total=len(train_data)/BATCH_SIZE):
+                                              total=len(train_data) / BATCH_SIZE):
             optimizer.zero_grad()
             y_pred = model(data.cuda(), seq_len)
-            label = torch.cat([x[x!=tag_to_ix['PAD']] for x in label])
+            label = torch.cat([x[x != tag_to_ix['PAD']] for x in label])
             loss = loss_criterion(y_pred, label.cuda())
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), CLIPS)
@@ -154,8 +175,47 @@ def train(X_train, y_train, X_dev, y_dev):
 
         y_eval_list = np.argmax(np.concatenate(y_eval_list, axis=0), axis=1)
         label_eval_list = np.concatenate(label_eval_list, axis=0)
-        print(classification_report(label_eval_list, y_eval_list))
+        # print(classification_report(label_eval_list, y_eval_list))
+        # print("Train Loss: ", str(train_loss / len(train_data)), " Evaluation: ", str(test_loss / len(dev_data)))
+
+        # report = classification_report(label_eval_list, y_eval_list)
+        # current_loss = test_loss / len(dev_data)
+        # print(report)
+        #
+        # print("Train Loss: ", str(train_loss / len(train_data)), " Evaluation: ", str(test_loss / len(dev_data)))
+        #
+        # # Code for early stopping
+        #
+        # y_eval_list = np.concatenate(y_eval_list, axis=0)
+        # label_eval_list = np.concatenate(label_eval_list, axis=0)
+        # report=classification_report(label_eval_list, y_eval_list)
+        # current_loss=test_loss / len(dev_data)
+        # print(report)
+        #
+        # print("Train Loss: ", str(train_loss / len(train_data)), " Evaluation: ", str(test_loss / len(dev_data)))
+
+        report = classification_report(label_eval_list, y_eval_list)
+        current_loss = test_loss / len(dev_data)
+        print(report)
+
         print("Train Loss: ", str(train_loss / len(train_data)), " Evaluation: ", str(test_loss / len(dev_data)))
+
+        # Code for early stopping
+        current_f1=sklearn.metrics.f1_score(label_eval_list,y_eval_list,average='macro')
+        print('macrof1 of epoch:'+str(current_f1))
+        if (current_f1 < best_f1):
+            print('Running out of patience' + str(new_patience))
+            if new_patience == 0:
+                break
+            else:
+                new_patience = new_patience - 1
+        else:
+            old_model = model
+            best_report = report
+            best_loss = current_loss
+            best_f1=current_f1
+    print('Best results are:')
+    print(best_report)
 
 
 def remove_symbol(s):
@@ -182,13 +242,16 @@ def preprocess_tokens(tokens, lem=LEM):
                 return wn.ADV
             else:
                 return wn.NOUN
+
         wordnet_lemmatizer = WordNetLemmatizer()
         pos_tags = nltk.pos_tag(tokens)
         _tokens = [wordnet_lemmatizer.lemmatize(x, get_wornet_pos(e[1])) for x, e in zip(tokens, pos_tags)]
         return _tokens
 
+
 def main():
-    training_data, A, X_dev, y_dev, Atest = pickle.load(open("FromSahir'sCode.pk", "rb"))
+    print('Using new dataset')
+    training_data, A, X_dev, y_dev, Atest = pickle.load(open("Dataset.pk", "rb"))
     X_train = [preprocess_tokens(x[0]) for x in training_data]
     y_train = [x[1] for x in training_data]
     X_dev = [preprocess_tokens(x) for x in X_dev]
