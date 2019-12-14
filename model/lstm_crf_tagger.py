@@ -93,7 +93,7 @@ class LSTMTagger(nn.Module):
         mask = torch.tensor(mask, dtype=torch.uint8).cuda()
 
         if not is_decode:
-            y[y == 999] = 0  # FIXME hardcoded '999' is the pad for tag
+            y[y == 7600] = 0  # FIXME hardcoded '999' is the pad for tag
             y = torch.tensor(y[:, :max_len], dtype=torch.long)
             return -self.crf(y_pred, y, mask=mask, reduction=reduction).cuda()
             # crf loss and decode logits
